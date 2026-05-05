@@ -1,34 +1,46 @@
 import { useEffect, useState, useCallback } from "react";
 
-export type MedFrequency = "daily" | "alternate" | "weekly";
+export type MedFrequency =
+  | "daily"
+  | "alternate"
+  | "weekly"
+  | "interval_hours"
+  | "interval_days";
 export type MedIcon = "pill" | "syrup" | "injection" | "capsule" | "drop";
+export type MedStatus = "active" | "paused" | "archived";
 
 export interface Medication {
   id: string;
   name: string;
   dosage: string;
   frequency: MedFrequency;
-  weekdays?: number[]; // for weekly: 0-6
-  times: string[]; // "HH:mm"
-  category: string; // e.g. "Pós-almoço"
+  weekdays?: number[]; // weekly: 0-6
+  intervalHours?: number; // interval_hours: e.g. 8, 12
+  intervalDays?: number; // interval_days: e.g. 2, 3
+  startTime?: string; // "HH:mm" anchor for interval_hours
+  times: string[]; // "HH:mm" — explicit list (or computed for hours)
+  category: string;
   icon: MedIcon;
-  photo?: string; // dataURL
+  photo?: string;
   startDate: string; // ISO yyyy-mm-dd
-  durationDays?: number; // undefined = continuous
+  durationDays?: number;
+  stock?: number;
+  lowStockThreshold?: number;
+  status: MedStatus;
   createdAt: string;
 }
 
 export interface DoseLog {
-  id: string; // medId + date + time
+  id: string;
   medId: string;
-  date: string; // yyyy-mm-dd
-  time: string; // HH:mm scheduled
-  takenAt?: string; // ISO when marked
+  date: string;
+  time: string;
+  takenAt?: string;
   status: "taken" | "missed" | "pending";
 }
 
-const KEY_MEDS = "medimind:meds";
-const KEY_LOGS = "medimind:logs";
+const KEY_MEDS = "medimind:meds:v2";
+const KEY_LOGS = "medimind:logs:v2";
 
 export function todayStr(d = new Date()) {
   const y = d.getFullYear();
@@ -57,18 +69,45 @@ function write<T>(key: string, value: T) {
   window.dispatchEvent(new CustomEvent("medimind:update"));
 }
 
+/** Compute the daily list of times for a med (resolves interval_hours dynamically). */
+export function computeDailyTimes(med: Medication): string[] {
+  if (med.frequency === "interval_hours" && med.intervalHours && med.startTime) {
+    const out: string[] = [];
+    const [sh, sm] = med.startTime.split(":").map(Number);
+    let mins = sh * 60 + sm;
+    const step = med.intervalHours * 60;
+    const seen = new Set<string>();
+    // Build doses across 24h starting at startTime
+    for (let i = 0; i < Math.ceil(1440 / step) + 1; i++) {
+      const m = ((mins + i * step) % 1440 + 1440) % 1440;
+      const t = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+      if (seen.has(t)) break;
+      seen.add(t);
+      out.push(t);
+    }
+    return out.sort();
+  }
+  return [...med.times].sort();
+}
+
 export function isMedScheduledOn(med: Medication, date: Date): boolean {
+  if (med.status !== "active") return false;
   const start = parseDate(med.startDate);
-  if (date < new Date(start.getFullYear(), start.getMonth(), start.getDate())) return false;
+  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  if (day < new Date(start.getFullYear(), start.getMonth(), start.getDate())) return false;
   if (med.durationDays) {
     const end = new Date(start);
     end.setDate(end.getDate() + med.durationDays - 1);
-    if (date > end) return false;
+    if (day > end) return false;
   }
-  if (med.frequency === "daily") return true;
+  if (med.frequency === "daily" || med.frequency === "interval_hours") return true;
   if (med.frequency === "alternate") {
-    const diff = Math.floor((+date - +start) / 86400000);
+    const diff = Math.floor((+day - +start) / 86400000);
     return diff % 2 === 0;
+  }
+  if (med.frequency === "interval_days" && med.intervalDays) {
+    const diff = Math.floor((+day - +start) / 86400000);
+    return diff % med.intervalDays === 0;
   }
   if (med.frequency === "weekly") {
     return (med.weekdays ?? []).includes(date.getDay());
@@ -98,6 +137,9 @@ function seed() {
       category: "Pós-refeição",
       icon: "pill",
       startDate: todayStr(start),
+      stock: 42,
+      lowStockThreshold: 10,
+      status: "active",
       createdAt: new Date().toISOString(),
     },
     {
@@ -109,34 +151,45 @@ function seed() {
       category: "Pós-almoço",
       icon: "capsule",
       startDate: todayStr(start),
+      stock: 18,
+      lowStockThreshold: 7,
+      status: "active",
       createdAt: new Date().toISOString(),
     },
     {
       id: "m3",
       name: "Vitamina D",
       dosage: "2000 UI",
-      frequency: "daily",
+      frequency: "interval_days",
+      intervalDays: 2,
       times: ["09:00"],
       category: "Manhã",
       icon: "drop",
       startDate: todayStr(start),
+      stock: 30,
+      lowStockThreshold: 5,
+      status: "active",
       createdAt: new Date().toISOString(),
     },
     {
       id: "m4",
       name: "Sinvastatina",
       dosage: "20mg",
-      frequency: "daily",
-      times: ["22:00"],
-      category: "Antes de dormir",
+      frequency: "interval_hours",
+      intervalHours: 12,
+      startTime: "08:00",
+      times: [],
+      category: "Cardiovascular",
       icon: "pill",
       startDate: todayStr(start),
+      stock: 6,
+      lowStockThreshold: 10,
+      status: "active",
       createdAt: new Date().toISOString(),
     },
   ];
   localStorage.setItem(KEY_MEDS, JSON.stringify(meds));
 
-  // Generate logs for last 120 days
   const logs: DoseLog[] = [];
   for (let i = 120; i >= 1; i--) {
     const d = new Date(today);
@@ -144,17 +197,25 @@ function seed() {
     const ds = todayStr(d);
     for (const med of meds) {
       if (!isMedScheduledOn(med, d)) continue;
-      for (const t of med.times) {
-        // Random adherence weighted ~ 80% taken
+      const times = computeDailyTimes(med);
+      for (const t of times) {
         const r = Math.random();
-        const status: DoseLog["status"] = r < 0.8 ? "taken" : "missed";
+        const status: DoseLog["status"] = r < 0.82 ? "taken" : "missed";
+        let takenAt: string | undefined;
+        if (status === "taken") {
+          // Random delay 0–90 minutes
+          const [h, m] = t.split(":").map(Number);
+          const taken = new Date(d);
+          taken.setHours(h, m + Math.floor(Math.random() * 90), 0, 0);
+          takenAt = taken.toISOString();
+        }
         logs.push({
           id: logId(med.id, ds, t),
           medId: med.id,
           date: ds,
           time: t,
           status,
-          takenAt: status === "taken" ? new Date(d).toISOString() : undefined,
+          takenAt,
         });
       }
     }
@@ -202,10 +263,11 @@ export function useLogs() {
   return logs;
 }
 
-export function addMed(med: Omit<Medication, "id" | "createdAt">) {
+export function addMed(med: Omit<Medication, "id" | "createdAt" | "status"> & { status?: MedStatus }) {
   const meds = read<Medication[]>(KEY_MEDS, []);
   const newMed: Medication = {
     ...med,
+    status: med.status ?? "active",
     id: `m${Date.now()}`,
     createdAt: new Date().toISOString(),
   };
@@ -214,8 +276,29 @@ export function addMed(med: Omit<Medication, "id" | "createdAt">) {
   return newMed;
 }
 
+export function updateMed(id: string, patch: Partial<Medication>) {
+  const meds = read<Medication[]>(KEY_MEDS, []);
+  const idx = meds.findIndex((m) => m.id === id);
+  if (idx < 0) return;
+  meds[idx] = { ...meds[idx], ...patch, id: meds[idx].id };
+  write(KEY_MEDS, meds);
+}
+
 export function deleteMed(id: string) {
   const meds = read<Medication[]>(KEY_MEDS, []).filter((m) => m.id !== id);
+  write(KEY_MEDS, meds);
+}
+
+export function setMedStatus(id: string, status: MedStatus) {
+  updateMed(id, { status });
+}
+
+export function adjustStock(id: string, delta: number) {
+  const meds = read<Medication[]>(KEY_MEDS, []);
+  const idx = meds.findIndex((m) => m.id === id);
+  if (idx < 0) return;
+  if (typeof meds[idx].stock !== "number") return;
+  meds[idx] = { ...meds[idx], stock: Math.max(0, (meds[idx].stock ?? 0) + delta) };
   write(KEY_MEDS, meds);
 }
 
@@ -223,6 +306,7 @@ export function markDose(medId: string, date: string, time: string, status: Dose
   const logs = read<DoseLog[]>(KEY_LOGS, []);
   const id = logId(medId, date, time);
   const idx = logs.findIndex((l) => l.id === id);
+  const prev = idx >= 0 ? logs[idx].status : "pending";
   const log: DoseLog = {
     id,
     medId,
@@ -234,6 +318,10 @@ export function markDose(medId: string, date: string, time: string, status: Dose
   if (idx >= 0) logs[idx] = log;
   else logs.push(log);
   write(KEY_LOGS, logs);
+
+  // Stock changes only when taken state actually flips
+  if (prev !== "taken" && status === "taken") adjustStock(medId, -1);
+  else if (prev === "taken" && status !== "taken") adjustStock(medId, +1);
 }
 
 export function getDoseStatus(logs: DoseLog[], medId: string, date: string, time: string): DoseLog["status"] {
@@ -247,6 +335,7 @@ export interface ScheduledDose {
   date: string;
   time: string;
   status: DoseLog["status"];
+  takenAt?: string;
 }
 
 export function getScheduledDosesForDate(meds: Medication[], logs: DoseLog[], date: Date): ScheduledDose[] {
@@ -254,31 +343,51 @@ export function getScheduledDosesForDate(meds: Medication[], logs: DoseLog[], da
   const out: ScheduledDose[] = [];
   for (const med of meds) {
     if (!isMedScheduledOn(med, date)) continue;
-    for (const t of med.times) {
+    const times = computeDailyTimes(med);
+    for (const t of times) {
+      const id = logId(med.id, ds, t);
+      const log = logs.find((l) => l.id === id);
       out.push({
         medId: med.id,
         med,
         date: ds,
         time: t,
-        status: getDoseStatus(logs, med.id, ds, t),
+        status: log?.status ?? "pending",
+        takenAt: log?.takenAt,
       });
     }
   }
   return out.sort((a, b) => a.time.localeCompare(b.time));
 }
 
-export function getAdherenceForDate(meds: Medication[], logs: DoseLog[], date: Date): { total: number; taken: number; ratio: number } {
+export function getAdherenceForDate(
+  meds: Medication[],
+  logs: DoseLog[],
+  date: Date,
+): { total: number; taken: number; ratio: number; onTimeRatio: number } {
   const doses = getScheduledDosesForDate(meds, logs, date);
   const total = doses.length;
   const taken = doses.filter((d) => d.status === "taken").length;
-  return { total, taken, ratio: total ? taken / total : 0 };
+  // on-time = taken within +/- 30 min of scheduled
+  let onTime = 0;
+  for (const d of doses) {
+    if (d.status !== "taken" || !d.takenAt) continue;
+    const [h, m] = d.time.split(":").map(Number);
+    const sched = new Date(d.date + "T00:00:00");
+    sched.setHours(h, m, 0, 0);
+    const diff = Math.abs(new Date(d.takenAt).getTime() - sched.getTime());
+    if (diff <= 30 * 60 * 1000) onTime++;
+  }
+  return { total, taken, ratio: total ? taken / total : 0, onTimeRatio: taken ? onTime / taken : 0 };
 }
 
-export function heatLevel(ratio: number, total: number): 0 | 1 | 2 | 3 | 4 {
-  if (total === 0) return 0;
-  if (ratio === 0) return 0;
+/** Heat level 0..4 with a "5" for perfect on-time. */
+export function heatLevel(ratio: number, total: number, onTimeRatio = 0): 0 | 1 | 2 | 3 | 4 | 5 {
+  if (total === 0 || ratio === 0) return 0;
   if (ratio < 0.5) return 1;
   if (ratio < 0.8) return 2;
   if (ratio < 1) return 3;
+  // 100% taken — distinguish on-time vs late
+  if (onTimeRatio >= 0.8) return 5;
   return 4;
 }
