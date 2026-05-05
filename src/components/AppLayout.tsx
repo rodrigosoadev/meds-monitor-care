@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
-import { Activity, Calendar, Home, Pill, Plus, Bell } from "lucide-react";
+import { Activity, Calendar, Home, Pill, Plus } from "lucide-react";
 import { NextDoseBanner } from "./NextDoseBanner";
+import { ThemeToggle } from "./ThemeToggle";
 
 const navItems = [
   { to: "/", label: "Hoje", icon: Home },
@@ -45,15 +46,18 @@ export function AppLayout() {
           })}
         </nav>
         <div className="mt-auto pt-6 border-t border-border">
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <Bell className="h-4 w-4" />
-            <span>Notificações ativas</span>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">Tema</span>
+            <ThemeToggle />
           </div>
         </div>
       </aside>
 
       <main className="md:pl-64 pb-24 md:pb-8">
         <div className="max-w-5xl mx-auto px-4 md:px-8 pt-6 md:pt-10">
+          <div className="md:hidden flex justify-end mb-3">
+            <ThemeToggle />
+          </div>
           <NextDoseBanner />
           <div className="mt-6 animate-fade-in">
             <Outlet />
