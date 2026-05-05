@@ -55,6 +55,9 @@ export function AppLayout() {
 
       <main className="md:pl-64 pb-24 md:pb-8">
         <div className="max-w-5xl mx-auto px-4 md:px-8 pt-6 md:pt-10">
+          <div className="md:hidden flex justify-end mb-3">
+            <ThemeToggle />
+          </div>
           <NextDoseBanner />
           <div className="mt-6 animate-fade-in">
             <Outlet />
