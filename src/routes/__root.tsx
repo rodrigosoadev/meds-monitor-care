@@ -1,6 +1,7 @@
 import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import appCss from "../styles.css?url";
 import { AppLayout } from "@/components/AppLayout";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from "sonner";
 
 function NotFoundComponent() {
@@ -51,10 +52,10 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   return (
-    <>
+    <ThemeProvider>
       <AppLayout />
-      <Toaster position="top-center" richColors />
-    </>
+      <Toaster position="top-center" richColors theme="system" />
+    </ThemeProvider>
   );
 }
 
