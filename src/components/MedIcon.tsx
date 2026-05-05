@@ -1,9 +1,9 @@
-import { Pill, Droplet, Syringe, Capsule, Tablets } from "lucide-react";
+import { Pill, Droplet, Syringe } from "lucide-react";
 import type { MedIcon as MedIconType } from "@/lib/storage";
 
 const MAP = {
   pill: Pill,
-  capsule: Tablets,
+  capsule: Pill,
   syrup: Droplet,
   injection: Syringe,
   drop: Droplet,
