@@ -1,26 +1,35 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { AppLayout } from "@/components/AppLayout";
+import { HealthHeatmap } from "@/components/HealthHeatmap";
+import { DoseList } from "@/components/DoseList";
+import { getAdherenceForDate, getScheduledDosesForDate, useLogs, useMeds } from "@/lib/storage";
+import { useMemo } from "react";
+import { Toaster } from "sonner";
 
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "MediMind — Sua adesão diária aos medicamentos" },
+      {
+        name: "description",
+        content:
+          "MediMind ajuda pacientes crônicos a gerenciar medicamentos com lembretes, histórico e mapa de calor de adesão.",
+      },
+    ],
+  }),
+  component: () => (
+    <>
+      <AppLayout />
+      <Toaster position="top-center" richColors />
+    </>
+  ),
 });
 
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
+// override layout's outlet content via index page
+export function Today() {
+  return <TodayPage />;
 }
 
-function Index() {
-  return <PlaceholderIndex />;
+function TodayPage() {
+  return null;
 }
