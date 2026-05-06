@@ -1,7 +1,9 @@
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
-import { Activity, Calendar, Home, Pill, Plus } from "lucide-react";
+import { Activity, Calendar, Home, Pill, Plus, LogOut } from "lucide-react";
 import { NextDoseBanner } from "./NextDoseBanner";
 import { ThemeToggle } from "./ThemeToggle";
+import { useAuth } from "@/lib/auth";
+import { toast } from "sonner";
 
 const navItems = [
   { to: "/", label: "Hoje", icon: Home },
@@ -12,6 +14,7 @@ const navItems = [
 
 export function AppLayout() {
   const loc = useLocation();
+  const { user, signOut } = useAuth();
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Desktop sidebar */}
@@ -45,18 +48,40 @@ export function AppLayout() {
             );
           })}
         </nav>
-        <div className="mt-auto pt-6 border-t border-border">
+        <div className="mt-auto pt-6 border-t border-border space-y-3">
           <div className="flex items-center justify-between gap-3">
             <span className="text-sm text-muted-foreground">Tema</span>
             <ThemeToggle />
           </div>
+          {user && (
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground truncate" title={user.email ?? ""}>
+                {user.email}
+              </div>
+              <button
+                onClick={async () => { await signOut(); toast("Sessão encerrada"); }}
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm border border-border hover:bg-accent transition"
+              >
+                <LogOut className="h-4 w-4" /> Sair
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
       <main className="md:pl-64 pb-24 md:pb-8">
         <div className="max-w-5xl mx-auto px-4 md:px-8 pt-6 md:pt-10">
-          <div className="md:hidden flex justify-end mb-3">
+          <div className="md:hidden flex justify-end items-center gap-2 mb-3">
             <ThemeToggle />
+            {user && (
+              <button
+                onClick={async () => { await signOut(); toast("Sessão encerrada"); }}
+                aria-label="Sair"
+                className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-border"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            )}
           </div>
           <NextDoseBanner />
           <div className="mt-6 animate-fade-in">

@@ -1,4 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "./auth";
+import { toast } from "sonner";
 
 export type MedFrequency =
   | "daily"
@@ -14,15 +17,15 @@ export interface Medication {
   name: string;
   dosage: string;
   frequency: MedFrequency;
-  weekdays?: number[]; // weekly: 0-6
-  intervalHours?: number; // interval_hours: e.g. 8, 12
-  intervalDays?: number; // interval_days: e.g. 2, 3
-  startTime?: string; // "HH:mm" anchor for interval_hours
-  times: string[]; // "HH:mm" — explicit list (or computed for hours)
+  weekdays?: number[];
+  intervalHours?: number;
+  intervalDays?: number;
+  startTime?: string;
+  times: string[];
   category: string;
   icon: MedIcon;
   photo?: string;
-  startDate: string; // ISO yyyy-mm-dd
+  startDate: string;
   durationDays?: number;
   stock?: number;
   lowStockThreshold?: number;
@@ -36,11 +39,8 @@ export interface DoseLog {
   date: string;
   time: string;
   takenAt?: string;
-  status: "taken" | "missed" | "pending";
+  status: "taken" | "missed" | "pending" | "delayed";
 }
-
-const KEY_MEDS = "medimind:meds:v2";
-const KEY_LOGS = "medimind:logs:v2";
 
 export function todayStr(d = new Date()) {
   const y = d.getFullYear();
@@ -54,30 +54,124 @@ export function parseDate(s: string) {
   return new Date(y, m - 1, d);
 }
 
-function read<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-function write<T>(key: string, value: T) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(key, JSON.stringify(value));
-  window.dispatchEvent(new CustomEvent("medimind:update"));
+// ---- Row <-> Domain mapping ----
+type MedRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  dosage: string;
+  category: string | null;
+  icon: MedIcon;
+  photo: string | null;
+  frequency: MedFrequency;
+  weekdays: number[] | null;
+  interval_hours: number | null;
+  interval_days: number | null;
+  start_time: string | null;
+  times: string[] | null;
+  start_date: string;
+  duration_days: number | null;
+  stock: number | null;
+  low_stock_threshold: number | null;
+  status: MedStatus;
+  created_at: string;
+};
+
+function rowToMed(r: MedRow): Medication {
+  return {
+    id: r.id,
+    name: r.name,
+    dosage: r.dosage,
+    category: r.category ?? "",
+    icon: r.icon,
+    photo: r.photo ?? undefined,
+    frequency: r.frequency,
+    weekdays: r.weekdays ?? undefined,
+    intervalHours: r.interval_hours ?? undefined,
+    intervalDays: r.interval_days ?? undefined,
+    startTime: r.start_time ?? undefined,
+    times: r.times ?? [],
+    startDate: r.start_date,
+    durationDays: r.duration_days ?? undefined,
+    stock: r.stock ?? undefined,
+    lowStockThreshold: r.low_stock_threshold ?? undefined,
+    status: r.status,
+    createdAt: r.created_at,
+  };
 }
 
-/** Compute the daily list of times for a med (resolves interval_hours dynamically). */
+function medToInsert(m: Omit<Medication, "id" | "createdAt" | "status"> & { status?: MedStatus }, userId: string) {
+  return {
+    user_id: userId,
+    name: m.name,
+    dosage: m.dosage,
+    category: m.category || null,
+    icon: m.icon,
+    photo: m.photo ?? null,
+    frequency: m.frequency,
+    weekdays: m.weekdays ?? null,
+    interval_hours: m.intervalHours ?? null,
+    interval_days: m.intervalDays ?? null,
+    start_time: m.startTime ?? null,
+    times: m.times ?? [],
+    start_date: m.startDate,
+    duration_days: m.durationDays ?? null,
+    stock: m.stock ?? null,
+    low_stock_threshold: m.lowStockThreshold ?? null,
+    status: m.status ?? "active",
+  };
+}
+
+function medToUpdate(p: Partial<Medication>) {
+  const u: Record<string, unknown> = {};
+  if (p.name !== undefined) u.name = p.name;
+  if (p.dosage !== undefined) u.dosage = p.dosage;
+  if (p.category !== undefined) u.category = p.category || null;
+  if (p.icon !== undefined) u.icon = p.icon;
+  if (p.photo !== undefined) u.photo = p.photo ?? null;
+  if (p.frequency !== undefined) u.frequency = p.frequency;
+  if ("weekdays" in p) u.weekdays = p.weekdays ?? null;
+  if ("intervalHours" in p) u.interval_hours = p.intervalHours ?? null;
+  if ("intervalDays" in p) u.interval_days = p.intervalDays ?? null;
+  if ("startTime" in p) u.start_time = p.startTime ?? null;
+  if (p.times !== undefined) u.times = p.times;
+  if (p.startDate !== undefined) u.start_date = p.startDate;
+  if ("durationDays" in p) u.duration_days = p.durationDays ?? null;
+  if ("stock" in p) u.stock = p.stock ?? null;
+  if ("lowStockThreshold" in p) u.low_stock_threshold = p.lowStockThreshold ?? null;
+  if (p.status !== undefined) u.status = p.status;
+  return u;
+}
+
+type LogRow = {
+  id: string;
+  medication_id: string;
+  user_id: string;
+  scheduled_date: string;
+  scheduled_time: string;
+  taken_at: string | null;
+  status: DoseLog["status"];
+};
+
+function rowToLog(r: LogRow): DoseLog {
+  return {
+    id: `${r.medication_id}|${r.scheduled_date}|${r.scheduled_time}`,
+    medId: r.medication_id,
+    date: r.scheduled_date,
+    time: r.scheduled_time,
+    takenAt: r.taken_at ?? undefined,
+    status: r.status,
+  };
+}
+
+// ---- Schedule logic (pure) ----
 export function computeDailyTimes(med: Medication): string[] {
   if (med.frequency === "interval_hours" && med.intervalHours && med.startTime) {
     const out: string[] = [];
     const [sh, sm] = med.startTime.split(":").map(Number);
-    let mins = sh * 60 + sm;
+    const mins = sh * 60 + sm;
     const step = med.intervalHours * 60;
     const seen = new Set<string>();
-    // Build doses across 24h starting at startTime
     for (let i = 0; i < Math.ceil(1440 / step) + 1; i++) {
       const m = ((mins + i * step) % 1440 + 1440) % 1440;
       const t = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -119,209 +213,181 @@ export function logId(medId: string, date: string, time: string) {
   return `${medId}|${date}|${time}`;
 }
 
-// ---- Seed demo data ----
-function seed() {
-  const medsExist = localStorage.getItem(KEY_MEDS);
-  if (medsExist) return;
-  const today = new Date();
-  const start = new Date(today);
-  start.setDate(start.getDate() - 120);
+// ---- Module-level cache + subscribers (single source of truth) ----
+let cachedMeds: Medication[] = [];
+let cachedLogs: DoseLog[] = [];
+let cachedUserId: string | null = null;
+let initialized = false;
+let loadingState = true;
+const subs = new Set<() => void>();
 
-  const meds: Medication[] = [
-    {
-      id: "m1",
-      name: "Losartana",
-      dosage: "50mg",
-      frequency: "daily",
-      times: ["08:00", "20:00"],
-      category: "Pós-refeição",
-      icon: "pill",
-      startDate: todayStr(start),
-      stock: 42,
-      lowStockThreshold: 10,
-      status: "active",
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: "m2",
-      name: "Metformina",
-      dosage: "850mg",
-      frequency: "daily",
-      times: ["12:30"],
-      category: "Pós-almoço",
-      icon: "capsule",
-      startDate: todayStr(start),
-      stock: 18,
-      lowStockThreshold: 7,
-      status: "active",
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: "m3",
-      name: "Vitamina D",
-      dosage: "2000 UI",
-      frequency: "interval_days",
-      intervalDays: 2,
-      times: ["09:00"],
-      category: "Manhã",
-      icon: "drop",
-      startDate: todayStr(start),
-      stock: 30,
-      lowStockThreshold: 5,
-      status: "active",
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: "m4",
-      name: "Sinvastatina",
-      dosage: "20mg",
-      frequency: "interval_hours",
-      intervalHours: 12,
-      startTime: "08:00",
-      times: [],
-      category: "Cardiovascular",
-      icon: "pill",
-      startDate: todayStr(start),
-      stock: 6,
-      lowStockThreshold: 10,
-      status: "active",
-      createdAt: new Date().toISOString(),
-    },
-  ];
-  localStorage.setItem(KEY_MEDS, JSON.stringify(meds));
+function notify() {
+  for (const s of subs) s();
+}
 
-  const logs: DoseLog[] = [];
-  for (let i = 120; i >= 1; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const ds = todayStr(d);
-    for (const med of meds) {
-      if (!isMedScheduledOn(med, d)) continue;
-      const times = computeDailyTimes(med);
-      for (const t of times) {
-        const r = Math.random();
-        const status: DoseLog["status"] = r < 0.82 ? "taken" : "missed";
-        let takenAt: string | undefined;
-        if (status === "taken") {
-          // Random delay 0–90 minutes
-          const [h, m] = t.split(":").map(Number);
-          const taken = new Date(d);
-          taken.setHours(h, m + Math.floor(Math.random() * 90), 0, 0);
-          takenAt = taken.toISOString();
-        }
-        logs.push({
-          id: logId(med.id, ds, t),
-          medId: med.id,
-          date: ds,
-          time: t,
-          status,
-          takenAt,
-        });
+async function loadAll(userId: string) {
+  loadingState = true;
+  notify();
+  const [{ data: meds, error: mErr }, { data: logs, error: lErr }] = await Promise.all([
+    supabase.from("medications").select("*").order("created_at", { ascending: true }),
+    supabase.from("adherence_logs").select("*"),
+  ]);
+  if (mErr) toast.error("Erro ao carregar medicamentos");
+  if (lErr) toast.error("Erro ao carregar histórico");
+  cachedMeds = (meds ?? []).map((r) => rowToMed(r as MedRow));
+  cachedLogs = (logs ?? []).map((r) => rowToLog(r as LogRow));
+  cachedUserId = userId;
+  loadingState = false;
+  initialized = true;
+  notify();
+}
+
+let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+
+function setupRealtime(userId: string) {
+  if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+  realtimeChannel = supabase
+    .channel(`medimind:${userId}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "medications", filter: `user_id=eq.${userId}` }, (payload) => {
+      if (payload.eventType === "DELETE") {
+        const id = (payload.old as MedRow).id;
+        cachedMeds = cachedMeds.filter((m) => m.id !== id);
+      } else {
+        const newMed = rowToMed(payload.new as MedRow);
+        const idx = cachedMeds.findIndex((m) => m.id === newMed.id);
+        if (idx >= 0) cachedMeds[idx] = newMed;
+        else cachedMeds = [...cachedMeds, newMed];
       }
-    }
+      notify();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "adherence_logs", filter: `user_id=eq.${userId}` }, (payload) => {
+      if (payload.eventType === "DELETE") {
+        const old = payload.old as LogRow;
+        cachedLogs = cachedLogs.filter((l) => l.id !== logId(old.medication_id, old.scheduled_date, old.scheduled_time));
+      } else {
+        const log = rowToLog(payload.new as LogRow);
+        const idx = cachedLogs.findIndex((l) => l.id === log.id);
+        if (idx >= 0) cachedLogs[idx] = log;
+        else cachedLogs = [...cachedLogs, log];
+      }
+      notify();
+    })
+    .subscribe();
+}
+
+function teardownRealtime() {
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel);
+    realtimeChannel = null;
   }
-  localStorage.setItem(KEY_LOGS, JSON.stringify(logs));
 }
 
-export function ensureSeed() {
-  if (typeof window === "undefined") return;
-  seed();
-}
+/** Hook that initialises the cache for the current user and subscribes to changes. */
+function useStoreSync() {
+  const { user, loading } = useAuth();
+  const [, setTick] = useState(0);
 
-// ---- React hooks ----
-export function useMeds() {
-  const [meds, setMeds] = useState<Medication[]>([]);
-  const refresh = useCallback(() => setMeds(read<Medication[]>(KEY_MEDS, [])), []);
   useEffect(() => {
-    ensureSeed();
-    refresh();
-    const onUp = () => refresh();
-    window.addEventListener("medimind:update", onUp);
-    window.addEventListener("storage", onUp);
+    const sub = () => setTick((n) => n + 1);
+    subs.add(sub);
     return () => {
-      window.removeEventListener("medimind:update", onUp);
-      window.removeEventListener("storage", onUp);
+      subs.delete(sub);
     };
-  }, [refresh]);
-  return meds;
-}
+  }, []);
 
-export function useLogs() {
-  const [logs, setLogs] = useState<DoseLog[]>([]);
-  const refresh = useCallback(() => setLogs(read<DoseLog[]>(KEY_LOGS, [])), []);
   useEffect(() => {
-    ensureSeed();
-    refresh();
-    const onUp = () => refresh();
-    window.addEventListener("medimind:update", onUp);
-    window.addEventListener("storage", onUp);
-    return () => {
-      window.removeEventListener("medimind:update", onUp);
-      window.removeEventListener("storage", onUp);
-    };
-  }, [refresh]);
-  return logs;
+    if (loading) return;
+    if (!user) {
+      cachedMeds = [];
+      cachedLogs = [];
+      cachedUserId = null;
+      initialized = false;
+      loadingState = false;
+      teardownRealtime();
+      notify();
+      return;
+    }
+    if (cachedUserId !== user.id) {
+      loadAll(user.id);
+      setupRealtime(user.id);
+    }
+  }, [user, loading]);
 }
 
-export function addMed(med: Omit<Medication, "id" | "createdAt" | "status"> & { status?: MedStatus }) {
-  const meds = read<Medication[]>(KEY_MEDS, []);
-  const newMed: Medication = {
-    ...med,
-    status: med.status ?? "active",
-    id: `m${Date.now()}`,
-    createdAt: new Date().toISOString(),
-  };
-  meds.push(newMed);
-  write(KEY_MEDS, meds);
-  return newMed;
+export function useMeds(): Medication[] {
+  useStoreSync();
+  return cachedMeds;
 }
 
-export function updateMed(id: string, patch: Partial<Medication>) {
-  const meds = read<Medication[]>(KEY_MEDS, []);
-  const idx = meds.findIndex((m) => m.id === id);
-  if (idx < 0) return;
-  meds[idx] = { ...meds[idx], ...patch, id: meds[idx].id };
-  write(KEY_MEDS, meds);
+export function useLogs(): DoseLog[] {
+  useStoreSync();
+  return cachedLogs;
 }
 
-export function deleteMed(id: string) {
-  const meds = read<Medication[]>(KEY_MEDS, []).filter((m) => m.id !== id);
-  write(KEY_MEDS, meds);
+export function useStoreLoading(): boolean {
+  useStoreSync();
+  return loadingState && !initialized;
 }
 
-export function setMedStatus(id: string, status: MedStatus) {
-  updateMed(id, { status });
+// ---- Mutations ----
+async function getUid() {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id;
 }
 
-export function adjustStock(id: string, delta: number) {
-  const meds = read<Medication[]>(KEY_MEDS, []);
-  const idx = meds.findIndex((m) => m.id === id);
-  if (idx < 0) return;
-  if (typeof meds[idx].stock !== "number") return;
-  meds[idx] = { ...meds[idx], stock: Math.max(0, (meds[idx].stock ?? 0) + delta) };
-  write(KEY_MEDS, meds);
+export async function addMed(med: Omit<Medication, "id" | "createdAt" | "status"> & { status?: MedStatus }) {
+  const uid = await getUid();
+  if (!uid) return;
+  const { error } = await supabase.from("medications").insert(medToInsert(med, uid));
+  if (error) toast.error(error.message);
 }
 
-export function markDose(medId: string, date: string, time: string, status: DoseLog["status"]) {
-  const logs = read<DoseLog[]>(KEY_LOGS, []);
+export async function updateMed(id: string, patch: Partial<Medication>) {
+  const u = medToUpdate(patch);
+  if (Object.keys(u).length === 0) return;
+  const { error } = await supabase.from("medications").update(u as never).eq("id", id);
+  if (error) toast.error(error.message);
+}
+
+export async function deleteMed(id: string) {
+  const { error } = await supabase.from("medications").delete().eq("id", id);
+  if (error) toast.error(error.message);
+}
+
+export async function setMedStatus(id: string, status: MedStatus) {
+  await updateMed(id, { status });
+}
+
+export async function adjustStock(id: string, delta: number) {
+  const m = cachedMeds.find((x) => x.id === id);
+  if (!m || typeof m.stock !== "number") return;
+  const next = Math.max(0, m.stock + delta);
+  await supabase.from("medications").update({ stock: next }).eq("id", id);
+}
+
+export async function markDose(medId: string, date: string, time: string, status: DoseLog["status"]) {
+  const uid = await getUid();
+  if (!uid) return;
   const id = logId(medId, date, time);
-  const idx = logs.findIndex((l) => l.id === id);
-  const prev = idx >= 0 ? logs[idx].status : "pending";
-  const log: DoseLog = {
-    id,
-    medId,
-    date,
-    time,
-    status,
-    takenAt: status === "taken" ? new Date().toISOString() : undefined,
-  };
-  if (idx >= 0) logs[idx] = log;
-  else logs.push(log);
-  write(KEY_LOGS, logs);
+  const prev = cachedLogs.find((l) => l.id === id)?.status ?? "pending";
 
-  // Stock changes only when taken state actually flips
-  if (prev !== "taken" && status === "taken") adjustStock(medId, -1);
-  else if (prev === "taken" && status !== "taken") adjustStock(medId, +1);
+  const payload = {
+    medication_id: medId,
+    user_id: uid,
+    scheduled_date: date,
+    scheduled_time: time,
+    status,
+    taken_at: status === "taken" ? new Date().toISOString() : null,
+  };
+  const { error } = await supabase
+    .from("adherence_logs")
+    .upsert(payload, { onConflict: "medication_id,scheduled_date,scheduled_time" });
+  if (error) {
+    toast.error(error.message);
+    return;
+  }
+  if (prev !== "taken" && status === "taken") await adjustStock(medId, -1);
+  else if (prev === "taken" && status !== "taken") await adjustStock(medId, +1);
 }
 
 export function getDoseStatus(logs: DoseLog[], medId: string, date: string, time: string): DoseLog["status"] {
@@ -368,7 +434,6 @@ export function getAdherenceForDate(
   const doses = getScheduledDosesForDate(meds, logs, date);
   const total = doses.length;
   const taken = doses.filter((d) => d.status === "taken").length;
-  // on-time = taken within +/- 30 min of scheduled
   let onTime = 0;
   for (const d of doses) {
     if (d.status !== "taken" || !d.takenAt) continue;
@@ -381,13 +446,14 @@ export function getAdherenceForDate(
   return { total, taken, ratio: total ? taken / total : 0, onTimeRatio: taken ? onTime / taken : 0 };
 }
 
-/** Heat level 0..4 with a "5" for perfect on-time. */
 export function heatLevel(ratio: number, total: number, onTimeRatio = 0): 0 | 1 | 2 | 3 | 4 | 5 {
   if (total === 0 || ratio === 0) return 0;
   if (ratio < 0.5) return 1;
   if (ratio < 0.8) return 2;
   if (ratio < 1) return 3;
-  // 100% taken — distinguish on-time vs late
   if (onTimeRatio >= 0.8) return 5;
   return 4;
 }
+
+// Backwards-compat no-op (was localStorage seed)
+export function ensureSeed() {}
