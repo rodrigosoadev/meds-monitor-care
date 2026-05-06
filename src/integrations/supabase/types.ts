@@ -14,7 +14,146 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      adherence_logs: {
+        Row: {
+          created_at: string
+          id: string
+          medication_id: string
+          scheduled_date: string
+          scheduled_time: string
+          status: Database["public"]["Enums"]["dose_status"]
+          taken_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          medication_id: string
+          scheduled_date: string
+          scheduled_time: string
+          status?: Database["public"]["Enums"]["dose_status"]
+          taken_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          medication_id?: string
+          scheduled_date?: string
+          scheduled_time?: string
+          status?: Database["public"]["Enums"]["dose_status"]
+          taken_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "adherence_logs_medication_id_fkey"
+            columns: ["medication_id"]
+            isOneToOne: false
+            referencedRelation: "medications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      medications: {
+        Row: {
+          category: string | null
+          created_at: string
+          dosage: string
+          duration_days: number | null
+          frequency: Database["public"]["Enums"]["med_frequency"]
+          icon: Database["public"]["Enums"]["med_icon"]
+          id: string
+          interval_days: number | null
+          interval_hours: number | null
+          low_stock_threshold: number | null
+          name: string
+          photo: string | null
+          start_date: string
+          start_time: string | null
+          status: Database["public"]["Enums"]["med_status"]
+          stock: number | null
+          times: string[]
+          updated_at: string
+          user_id: string
+          weekdays: number[] | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          dosage: string
+          duration_days?: number | null
+          frequency?: Database["public"]["Enums"]["med_frequency"]
+          icon?: Database["public"]["Enums"]["med_icon"]
+          id?: string
+          interval_days?: number | null
+          interval_hours?: number | null
+          low_stock_threshold?: number | null
+          name: string
+          photo?: string | null
+          start_date?: string
+          start_time?: string | null
+          status?: Database["public"]["Enums"]["med_status"]
+          stock?: number | null
+          times?: string[]
+          updated_at?: string
+          user_id: string
+          weekdays?: number[] | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          dosage?: string
+          duration_days?: number | null
+          frequency?: Database["public"]["Enums"]["med_frequency"]
+          icon?: Database["public"]["Enums"]["med_icon"]
+          id?: string
+          interval_days?: number | null
+          interval_hours?: number | null
+          low_stock_threshold?: number | null
+          name?: string
+          photo?: string | null
+          start_date?: string
+          start_time?: string | null
+          status?: Database["public"]["Enums"]["med_status"]
+          stock?: number | null
+          times?: string[]
+          updated_at?: string
+          user_id?: string
+          weekdays?: number[] | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +162,15 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      dose_status: "taken" | "missed" | "pending" | "delayed"
+      med_frequency:
+        | "daily"
+        | "alternate"
+        | "weekly"
+        | "interval_hours"
+        | "interval_days"
+      med_icon: "pill" | "syrup" | "injection" | "capsule" | "drop"
+      med_status: "active" | "paused" | "archived"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +297,17 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      dose_status: ["taken", "missed", "pending", "delayed"],
+      med_frequency: [
+        "daily",
+        "alternate",
+        "weekly",
+        "interval_hours",
+        "interval_days",
+      ],
+      med_icon: ["pill", "syrup", "injection", "capsule", "drop"],
+      med_status: ["active", "paused", "archived"],
+    },
   },
 } as const
