@@ -345,7 +345,7 @@ export async function addMed(med: Omit<Medication, "id" | "createdAt" | "status"
 export async function updateMed(id: string, patch: Partial<Medication>) {
   const u = medToUpdate(patch);
   if (Object.keys(u).length === 0) return;
-  const { error } = await supabase.from("medications").update(u).eq("id", id);
+  const { error } = await supabase.from("medications").update(u as never).eq("id", id);
   if (error) toast.error(error.message);
 }
 
