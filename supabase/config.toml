@@ -1,1 +1,4 @@
 project_id = "csxfglqxzwwiatrcilgr"
+
+[functions.check-doses]
+verify_jwt = false
