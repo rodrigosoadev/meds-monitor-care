@@ -1,9 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { HealthHeatmap } from "@/components/HealthHeatmap";
 import { DoseList } from "@/components/DoseList";
-import { getAdherenceForDate, getScheduledDosesForDate, useLogs, useMeds } from "@/lib/storage";
-import { useMemo } from "react";
-import { TrendingUp, Target, Flame } from "lucide-react";
+import { getAdherenceForDate, getScheduledDosesForDate, useLogs, useMeds, useStoreLoading } from "@/lib/storage";
+import { useEffect, useMemo, useState } from "react";
+import { TrendingUp, Target, Flame, Plus } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -18,11 +19,14 @@ export const Route = createFileRoute("/")({
 function TodayPage() {
   const meds = useMeds();
   const logs = useLogs();
+  const loading = useStoreLoading();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const today = useMemo(() => new Date(), []);
   const doses = useMemo(() => getScheduledDosesForDate(meds, logs, today), [meds, logs, today]);
   const adherence = getAdherenceForDate(meds, logs, today);
 
-  // streak: consecutive days back from yesterday with 100% adherence
   const streak = useMemo(() => {
     let s = 0;
     const d = new Date(today);
@@ -36,7 +40,6 @@ function TodayPage() {
     return s;
   }, [meds, logs, today]);
 
-  // 30-day average
   const avg30 = useMemo(() => {
     let sum = 0;
     let n = 0;
@@ -52,65 +55,68 @@ function TodayPage() {
     return n ? sum / n : 0;
   }, [meds, logs, today]);
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-48" />
+        <div className="grid grid-cols-3 gap-3"><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
+        <Skeleton className="h-48" />
+        <Skeleton className="h-32" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Olá 👋</h1>
-        <p className="text-muted-foreground mt-1">
-          {today.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
+        <p className="text-muted-foreground mt-1 min-h-[1.25rem]">
+          {mounted ? today.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }) : ""}
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 md:gap-4">
-        <StatCard
-          icon={Target}
-          label="Adesão hoje"
-          value={`${Math.round(adherence.ratio * 100)}%`}
-          sub={`${adherence.taken}/${adherence.total} doses`}
-          tone="primary"
-        />
-        <StatCard
-          icon={TrendingUp}
-          label="Média 30d"
-          value={`${Math.round(avg30 * 100)}%`}
-          sub="últimos 30 dias"
-          tone="success"
-        />
-        <StatCard icon={Flame} label="Sequência" value={`${streak}`} sub="dias 100%" tone="warning" />
-      </div>
-
-      <HealthHeatmap />
-
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Agenda de hoje</h2>
-          <span className="text-sm text-muted-foreground">{doses.length} doses</span>
+      {meds.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card/40 p-10 text-center">
+          <h2 className="text-xl font-semibold">Vamos começar?</h2>
+          <p className="text-sm text-muted-foreground mt-1 mb-4">Cadastre seu primeiro medicamento para acompanhar sua adesão.</p>
+          <Link to="/add" className="inline-flex items-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 font-medium">
+            <Plus className="h-4 w-4" /> Adicionar medicamento
+          </Link>
         </div>
-        <DoseList doses={doses} />
-      </section>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-3 md:gap-4">
+            <StatCard icon={Target} label="Adesão hoje" value={`${Math.round(adherence.ratio * 100)}%`} sub={`${adherence.taken}/${adherence.total} doses`} tone="primary" />
+            <StatCard icon={TrendingUp} label="Média 30d" value={`${Math.round(avg30 * 100)}%`} sub="últimos 30 dias" tone="success" />
+            <StatCard icon={Flame} label="Sequência" value={`${streak}`} sub="dias 100%" tone="warning" />
+          </div>
+
+          <HealthHeatmap />
+
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Agenda de hoje</h2>
+              <span className="text-sm text-muted-foreground">{doses.length} doses</span>
+            </div>
+            <DoseList doses={doses} />
+          </section>
+        </>
+      )}
     </div>
   );
 }
 
 function StatCard({
-  icon: Icon,
-  label,
-  value,
-  sub,
-  tone,
+  icon: Icon, label, value, sub, tone,
 }: {
-  icon: any;
-  label: string;
-  value: string;
-  sub: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string; value: string; sub: string;
   tone: "primary" | "success" | "warning";
 }) {
   const toneCls =
-    tone === "primary"
-      ? "bg-primary/10 text-primary"
-      : tone === "success"
-      ? "bg-success/15 text-success"
-      : "bg-warning/20 text-warning-foreground";
+    tone === "primary" ? "bg-primary/10 text-primary"
+    : tone === "success" ? "bg-success/15 text-success"
+    : "bg-warning/20 text-warning-foreground";
   return (
     <div className="rounded-2xl border border-border bg-card p-3 md:p-4 shadow-sm">
       <div className={`h-8 w-8 md:h-10 md:w-10 rounded-lg flex items-center justify-center ${toneCls}`}>
