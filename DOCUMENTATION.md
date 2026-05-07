@@ -140,7 +140,7 @@ O projeto Lovable Cloud popula automaticamente o ficheiro `.env`:
 | Variável                       | Onde é usada                          |
 |--------------------------------|---------------------------------------|
 | `VITE_SUPABASE_URL`            | Cliente browser (`@/integrations/supabase/client`) |
-| `VITE_SUPABASE_PUBLISHABLE_KEY`| Cliente browser                       |
+| `VITE_SUPABASE_ANON_KEY`| Cliente browser                       |
 | `VITE_SUPABASE_PROJECT_ID`     | Referência interna                    |
 
 Em **Edge Functions** (server-side):
