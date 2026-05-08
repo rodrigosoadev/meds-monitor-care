@@ -1,5 +1,18 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/client",
+  "framework": "vite",
+  "nodeVersion": "20.x",
+  "serverlessFunctionRegion": "iad1",
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "nodejs20.x"
+    }
+  },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    {
+      "source": "/:path((?!assets|_next|.*))",
+      "destination": "/index.html"
+    }
   ]
 }
