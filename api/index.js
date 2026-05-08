@@ -1,18 +1,10 @@
-const { createServer } = require('http');
-const { readFileSync, existsSync } = require('fs');
-const { join } = require('path');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Importar o servidor TanStack Start
-let serverHandler;
-try {
-  const serverModule = require('../dist/server/index.js');
-  serverHandler = serverModule.default || serverModule;
-} catch (e) {
-  console.error('Erro ao carregar servidor:', e);
-}
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-module.exports = async (req, res) => {
+export default async (req, res) => {
   try {
     // Definir CORS headers
     res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -28,9 +20,9 @@ module.exports = async (req, res) => {
 
     // Servir arquivos estáticos do dist/client
     if (req.method === 'GET' && /^\/assets\//.test(req.url)) {
-      const filePath = join(__dirname, '../dist/client', req.url);
-      if (existsSync(filePath)) {
-        const content = readFileSync(filePath);
+      const filePath = path.join(__dirname, '../dist/client', req.url);
+      if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath);
         const ext = path.extname(filePath);
         const mimeTypes = {
           '.js': 'application/javascript',
@@ -47,15 +39,10 @@ module.exports = async (req, res) => {
       }
     }
 
-    // Usar o servidor TanStack Start se disponível
-    if (serverHandler && typeof serverHandler === 'function') {
-      return serverHandler(req, res);
-    }
-
-    // Fallback: servir index.html
-    const indexPath = join(__dirname, '../dist/client/index.html');
-    if (existsSync(indexPath)) {
-      const html = readFileSync(indexPath, 'utf-8');
+    // Fallback: servir index.html para SPA routing
+    const indexPath = path.join(__dirname, '../dist/client/index.html');
+    if (fs.existsSync(indexPath)) {
+      const html = fs.readFileSync(indexPath, 'utf-8');
       res.setHeader('Content-Type', 'text/html');
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       return res.end(html);
