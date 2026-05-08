@@ -2,10 +2,15 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/client",
   "framework": "vite",
+  "functions": {
+    "api/index.cjs": {
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
-      "source": "/:path((?!assets|_next|.*))",
-      "destination": "/index.html"
+      "source": "/(.*)",
+      "destination": "/api/index.cjs"
     }
   ]
 }
