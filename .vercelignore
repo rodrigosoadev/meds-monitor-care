@@ -1,0 +1,17 @@
+.git
+.gitignore
+.vscode
+.wrangler
+.tanstack
+node_modules
+src
+dist/server
+supabase
+.env
+.env.local
+*.md
+tsconfig.json
+vite.config.ts
+package-lock.json
+bun.lockb
+eslint.config.js
