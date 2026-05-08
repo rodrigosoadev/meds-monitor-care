@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Activity, Mail, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 
@@ -70,16 +69,18 @@ function AuthPage() {
 
   async function google() {
     setBusy(true);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/`,
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
     });
-    if (result.error) {
-      toast.error(result.error.message);
+    if (error) {
+      toast.error(error.message);
       setBusy(false);
       return;
     }
-    if (result.redirected) return;
-    nav({ to: "/" });
+    // OAuth will redirect, so no need to navigate here
   }
 
   return (
@@ -133,7 +134,7 @@ function AuthPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="auth-input pl-9"
-                placeholder="voce@email.com"
+                placeholder="    voce@email.com"
               />
             </Field>
             {mode !== "forgot" && (
@@ -145,7 +146,7 @@ function AuthPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="auth-input pl-9"
-                  placeholder="••••••••"
+                  placeholder="    ••••••••"
                 />
               </Field>
             )}
