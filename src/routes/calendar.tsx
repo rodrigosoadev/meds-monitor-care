@@ -79,11 +79,16 @@ function CalendarPage() {
             const lvl = c.date <= today ? heatLevel(a.ratio, a.total) : 0;
             const isToday = todayStr(c.date) === todayStr(today);
             const isSelected = todayStr(c.date) === todayStr(selected);
+
+            // Get scheduled medications for this date
+            const scheduledDoses = c.date <= today ? getScheduledDosesForDate(meds, logs, c.date) : [];
+            const uniqueMeds = [...new Set(scheduledDoses.map(d => d.med.name))];
+
             return (
               <button
                 key={i}
                 onClick={() => setSelected(c.date!)}
-                className={`aspect-square rounded-lg p-1 text-xs md:text-sm font-medium border transition flex flex-col items-center justify-center gap-1 ${
+                className={`aspect-square rounded-lg p-1 text-xs md:text-sm font-medium border transition flex flex-col items-center justify-start gap-0.5 ${
                   isSelected
                     ? "border-primary ring-2 ring-primary/40"
                     : "border-transparent hover:border-border"
@@ -91,6 +96,24 @@ function CalendarPage() {
               >
                 <span className={isToday ? "text-primary font-bold" : ""}>{c.date.getDate()}</span>
                 {a.total > 0 && <span className={`h-1.5 w-1.5 rounded-full ${HEAT[lvl]}`} />}
+                {uniqueMeds.length > 0 && (
+                  <div className="flex flex-col gap-0.5 max-h-8 overflow-hidden">
+                    {uniqueMeds.slice(0, 2).map((medName, idx) => (
+                      <span
+                        key={idx}
+                        className="text-[8px] md:text-[10px] leading-tight text-muted-foreground truncate max-w-full"
+                        title={medName}
+                      >
+                        {medName.length > 6 ? `${medName.substring(0, 6)}...` : medName}
+                      </span>
+                    ))}
+                    {uniqueMeds.length > 2 && (
+                      <span className="text-[8px] md:text-[10px] leading-tight text-muted-foreground">
+                        +{uniqueMeds.length - 2}
+                      </span>
+                    )}
+                  </div>
+                )}
               </button>
             );
           })}
