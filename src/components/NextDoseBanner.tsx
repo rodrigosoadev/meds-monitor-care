@@ -17,18 +17,25 @@ export function NextDoseBanner() {
     return () => clearInterval(i);
   }, []);
 
-  const { next, prev } = useMemo<{ next?: ScheduledDose; prev?: ScheduledDose }>(() => {
+  const { next, prev } = useMemo<{ next: ScheduledDose[]; prev?: ScheduledDose }>(() => {
     const doses = getScheduledDosesForDate(meds, logs, now);
     const nowMin = now.getHours() * 60 + now.getMinutes();
-    const upcoming = doses.find((d) => d.status !== "taken" && timeToMinutes(d.time) >= nowMin);
+    let nextTime: number | undefined;
     let prev: ScheduledDose | undefined;
+
     for (const d of doses) {
-      if (timeToMinutes(d.time) <= nowMin) prev = d;
+      const doseMin = timeToMinutes(d.time);
+      if (doseMin <= nowMin) prev = d;
+      if (d.status !== "taken" && doseMin >= nowMin) {
+        if (nextTime === undefined || doseMin < nextTime) nextTime = doseMin;
+      }
     }
-    return { next: upcoming, prev };
+
+    const next = nextTime === undefined ? [] : doses.filter((d) => d.status !== "taken" && timeToMinutes(d.time) === nextTime);
+    return { next, prev };
   }, [meds, logs, now]);
 
-  if (!next) {
+  if (next.length === 0) {
     return (
       <div className="rounded-2xl border border-border bg-card p-4 md:p-5 flex items-center gap-4 shadow-sm">
         <div className="h-12 w-12 rounded-xl bg-success/15 text-success flex items-center justify-center">
@@ -43,7 +50,7 @@ export function NextDoseBanner() {
   }
 
   const target = new Date(now);
-  const [h, m] = next.time.split(":").map(Number);
+  const [h, m] = next[0].time.split(":").map(Number);
   target.setHours(h, m, 0, 0);
   const diff = Math.max(0, target.getTime() - now.getTime());
   const hh = Math.floor(diff / 3_600_000);
@@ -74,9 +81,11 @@ export function NextDoseBanner() {
         <div className="flex-1 min-w-0">
           <div className="text-xs uppercase tracking-wider opacity-80">Próxima dose</div>
           <div className="font-semibold truncate text-lg">
-            {next.med.name} · {next.med.dosage}
+            {next.length === 1 ? `${next[0].med.name} · ${next[0].med.dosage}` : `${next.length} medicamentos`}
           </div>
-          <div className="text-sm opacity-90">{next.med.category} · às {next.time}</div>
+          <div className="text-sm opacity-90">
+            {next.length === 1 ? `${next[0].med.category}` : next.map((d) => d.med.name).join(", ")} · às {next[0].time}
+          </div>
         </div>
         <div className="text-right">
           <div className="font-mono text-2xl md:text-3xl font-bold tabular-nums">{fmt}</div>

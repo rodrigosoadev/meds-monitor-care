@@ -1,13 +1,11 @@
-// Custom build target for Vercel deployment.
-// - Disables the Cloudflare plugin (default in Lovable's preset).
-// - Tells TanStack Start to emit the Vercel preset (.vercel/output/).
-// In the Lovable sandbox this still runs fine for `vite dev`; the preset only
-// affects production output.
+// Custom build target for Cloudflare deployment.
+// - Enables the Cloudflare plugin.
+// - Tells TanStack Start to emit the Cloudflare preset.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
-  cloudflare: false,
+  cloudflare: true,
   tanstackStart: {
-    target: "vercel",
+    target: "cloudflare",
   },
 });

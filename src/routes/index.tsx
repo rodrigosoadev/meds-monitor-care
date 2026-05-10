@@ -25,7 +25,7 @@ function TodayPage() {
 
   const today = useMemo(() => new Date(), []);
   const doses = useMemo(() => getScheduledDosesForDate(meds, logs, today), [meds, logs, today]);
-  const adherence = getAdherenceForDate(meds, logs, today);
+  const adherence = useMemo(() => getAdherenceForDate(meds, logs, today), [meds, logs, today]);
 
   const streak = useMemo(() => {
     let s = 0;

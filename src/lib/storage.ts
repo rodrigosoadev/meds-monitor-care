@@ -229,8 +229,8 @@ async function loadAll(userId: string) {
   loadingState = true;
   notify();
   const [{ data: meds, error: mErr }, { data: logs, error: lErr }] = await Promise.all([
-    supabase.from("medications").select("*").order("created_at", { ascending: true }),
-    supabase.from("adherence_logs").select("*"),
+    supabase.from("medications").select("*").eq("user_id", userId).order("created_at", { ascending: true }),
+    supabase.from("adherence_logs").select("*").eq("user_id", userId).order("scheduled_date", { ascending: true }).order("scheduled_time", { ascending: true }),
   ]);
   if (mErr) toast.error("Erro ao carregar medicamentos");
   if (lErr) toast.error("Erro ao carregar histórico");
@@ -243,48 +243,94 @@ async function loadAll(userId: string) {
 }
 
 let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+let realtimeUserId: string | null = null;
+const connectedStates = new Set(["joined", "joining", "subscribed", "connecting", "open"]);
 
 function setupRealtime(userId: string) {
-  if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+  console.log("[setupRealtime] Setting up realtime for user:", userId);
+  if (realtimeChannel) {
+    const status = realtimeChannel.state ?? (realtimeChannel as any).status;
+    if (realtimeUserId === userId && connectedStates.has(status)) {
+      console.log("[setupRealtime] Existing channel already connected for user", userId);
+      return;
+    }
+    console.log("[setupRealtime] Removing old channel");
+    supabase.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+    realtimeUserId = null;
+  }
+
+  realtimeUserId = userId;
   realtimeChannel = supabase
     .channel(`medimind:${userId}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "medications", filter: `user_id=eq.${userId}` }, (payload) => {
+      console.log("[Realtime] Medications change received:", payload.eventType);
       if (payload.eventType === "DELETE") {
         const id = (payload.old as MedRow).id;
         cachedMeds = cachedMeds.filter((m) => m.id !== id);
       } else {
         const newMed = rowToMed(payload.new as MedRow);
         const idx = cachedMeds.findIndex((m) => m.id === newMed.id);
-        if (idx >= 0) cachedMeds[idx] = newMed;
+        if (idx >= 0) cachedMeds = cachedMeds.map((m) => (m.id === newMed.id ? newMed : m));
         else cachedMeds = [...cachedMeds, newMed];
       }
       notify();
     })
     .on("postgres_changes", { event: "*", schema: "public", table: "adherence_logs", filter: `user_id=eq.${userId}` }, (payload) => {
+      console.log("[Realtime] Adherence logs change received:", payload.eventType);
       if (payload.eventType === "DELETE") {
         const old = payload.old as LogRow;
         cachedLogs = cachedLogs.filter((l) => l.id !== logId(old.medication_id, old.scheduled_date, old.scheduled_time));
       } else {
         const log = rowToLog(payload.new as LogRow);
         const idx = cachedLogs.findIndex((l) => l.id === log.id);
-        if (idx >= 0) cachedLogs[idx] = log;
-        else cachedLogs = [...cachedLogs, log];
+        if (idx >= 0) {
+          cachedLogs = cachedLogs.map((l) => (l.id === log.id ? log : l));
+        } else {
+          cachedLogs = [...cachedLogs, log];
+        }
       }
       notify();
     })
-    .subscribe();
+    .subscribe((status, err) => {
+      console.log("[setupRealtime] Subscribe status:", status, "Error:", err);
+      if (status === "SUBSCRIBED") {
+        console.log("[setupRealtime] Realtime subscribed successfully");
+      } else if (status === "CHANNEL_ERROR") {
+        console.error("[setupRealtime] Channel error:", err);
+      } else if (status === "TIMED_OUT") {
+        console.error("[setupRealtime] Channel timed out");
+      }
+    });
 }
 
 function teardownRealtime() {
   if (realtimeChannel) {
+    console.log("[teardownRealtime] Removing channel");
     supabase.removeChannel(realtimeChannel);
     realtimeChannel = null;
+    realtimeUserId = null;
+  }
+}
+
+function ensureRealtimeConnected(userId: string) {
+  if (!realtimeChannel || realtimeUserId !== userId) {
+    console.log("[ensureRealtimeConnected] Channel missing or wrong user, setting up", userId, realtimeUserId);
+    setupRealtime(userId);
+    return;
+  }
+  const status = realtimeChannel.state ?? (realtimeChannel as any).status;
+  console.log("[ensureRealtimeConnected] Current channel state:", status);
+  if (!connectedStates.has(status)) {
+    console.log("[ensureRealtimeConnected] Channel not connected, reconnecting");
+    setupRealtime(userId);
   }
 }
 
 /** Hook that initialises the cache for the current user and subscribes to changes. */
 function useStoreSync() {
   const { user, loading } = useAuth();
+  const userId = user?.id ?? null;
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -297,7 +343,7 @@ function useStoreSync() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) {
+    if (!userId) {
       cachedMeds = [];
       cachedLogs = [];
       cachedUserId = null;
@@ -307,11 +353,12 @@ function useStoreSync() {
       notify();
       return;
     }
-    if (cachedUserId !== user.id) {
-      loadAll(user.id);
-      setupRealtime(user.id);
+
+    if (cachedUserId !== userId) {
+      loadAll(userId);
     }
-  }, [user, loading]);
+    ensureRealtimeConnected(userId);
+  }, [loading, userId]);
 }
 
 export function useMeds(): Medication[] {
@@ -336,22 +383,53 @@ async function getUid() {
 }
 
 export async function addMed(med: Omit<Medication, "id" | "createdAt" | "status"> & { status?: MedStatus }) {
+  console.log("[addMed] Called");
   const uid = await getUid();
   if (!uid) return;
-  const { error } = await supabase.from("medications").insert(medToInsert(med, uid));
-  if (error) toast.error(error.message);
+  const { error, data } = await supabase.from("medications").insert(medToInsert(med, uid)).select().single();
+  if (error) {
+    console.error("[addMed] Error:", error.message);
+    toast.error(error.message);
+    return;
+  }
+  console.log("[addMed] Success, updating cache");
+  const newMed = rowToMed(data as MedRow);
+  cachedMeds = [...cachedMeds, newMed];
+  notify();
+  ensureRealtimeConnected(uid);
 }
 
 export async function updateMed(id: string, patch: Partial<Medication>) {
+  console.log("[updateMed] Called with id:", id);
   const u = medToUpdate(patch);
   if (Object.keys(u).length === 0) return;
-  const { error } = await supabase.from("medications").update(u as never).eq("id", id);
-  if (error) toast.error(error.message);
+  const uid = await getUid();
+  const { error, data } = await supabase.from("medications").update(u as never).eq("id", id).select().single();
+  if (error) {
+    console.error("[updateMed] Error:", error.message);
+    toast.error(error.message);
+    return;
+  }
+  console.log("[updateMed] Success, updating cache");
+  const updated = rowToMed(data as MedRow);
+  cachedMeds = cachedMeds.map((m) => (m.id === id ? updated : m));
+  notify();
+  if (uid) ensureRealtimeConnected(uid);
 }
 
 export async function deleteMed(id: string) {
+  console.log("[deleteMed] Called with id:", id);
+  const uid = await getUid();
   const { error } = await supabase.from("medications").delete().eq("id", id);
-  if (error) toast.error(error.message);
+  if (error) {
+    console.error("[deleteMed] Error:", error.message);
+    toast.error(error.message);
+    return;
+  }
+  console.log("[deleteMed] Success, updating cache");
+  cachedMeds = cachedMeds.filter((m) => m.id !== id);
+  notify();
+  if (uid) ensureRealtimeConnected(uid);
 }
 
 export async function setMedStatus(id: string, status: MedStatus) {
@@ -362,7 +440,13 @@ export async function adjustStock(id: string, delta: number) {
   const m = cachedMeds.find((x) => x.id === id);
   if (!m || typeof m.stock !== "number") return;
   const next = Math.max(0, m.stock + delta);
-  await supabase.from("medications").update({ stock: next }).eq("id", id);
+  const { error } = await supabase.from("medications").update({ stock: next }).eq("id", id);
+  if (error) {
+    toast.error(error.message);
+    return;
+  }
+  cachedMeds = cachedMeds.map((x) => (x.id === id ? { ...x, stock: next } : x));
+  notify();
 }
 
 export async function markDose(medId: string, date: string, time: string, status: DoseLog["status"]) {
@@ -386,6 +470,24 @@ export async function markDose(medId: string, date: string, time: string, status
     toast.error(error.message);
     return;
   }
+
+  const log: DoseLog = {
+    id,
+    medId,
+    date,
+    time,
+    status,
+    takenAt: payload.taken_at ?? undefined,
+  };
+  const idx = cachedLogs.findIndex((l) => l.id === id);
+  if (idx >= 0) {
+    cachedLogs = cachedLogs.map((l, i) => (i === idx ? log : l));
+  } else {
+    cachedLogs = [...cachedLogs, log];
+  }
+  notify();
+  ensureRealtimeConnected(uid);
+
   if (prev !== "taken" && status === "taken") await adjustStock(medId, -1);
   else if (prev === "taken" && status !== "taken") await adjustStock(medId, +1);
 }
