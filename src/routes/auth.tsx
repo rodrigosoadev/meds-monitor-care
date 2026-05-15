@@ -1,4 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import { useEffect, useState } from "react";
 import { Activity, Mail, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -70,10 +72,14 @@ function AuthPage() {
 
   async function google() {
     setBusy(true);
-    const { error } = await supabase.auth.signInWithOAuth({
+    const isNative = Capacitor.isNativePlatform();
+    const redirectTo = isNative ? "com.medsmonitor.app://callback" : `${window.location.origin}/`;
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo,
+        skipBrowserRedirect: isNative,
       },
     });
     if (error) {
@@ -81,7 +87,10 @@ function AuthPage() {
       setBusy(false);
       return;
     }
-    // OAuth will redirect, so no need to navigate here
+
+    if (isNative && data?.url) {
+      await Browser.open({ url: data.url, windowName: "_self" });
+    }
   }
 
   return (

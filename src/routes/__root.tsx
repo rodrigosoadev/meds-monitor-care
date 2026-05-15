@@ -5,6 +5,9 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { useEffect } from "react";
+import { App } from "@capacitor/app";
+import { Browser } from "@capacitor/browser";
+import { supabase } from "@/integrations/supabase/client";
 
 function NotFoundComponent() {
   return (
@@ -82,6 +85,32 @@ function AuthGate() {
 }
 
 function RootComponent() {
+  useEffect(() => {
+    let listener: any;
+
+    const setupListener = async () => {
+      listener = await App.addListener("appUrlOpen", async ({ url }) => {
+        if (!url || (!url.includes("code=") && !url.includes("access_token"))) return;
+
+        try {
+          await Browser.close();
+          const { data, error } = await supabase.auth.exchangeCodeForSession(url);
+          if (error) {
+            console.error("Supabase exchangeCodeForSession error:", error);
+          }
+        } catch (err) {
+          console.error("Failed to handle appUrlOpen:", err);
+        }
+      });
+    };
+
+    setupListener();
+
+    return () => {
+      listener?.remove?.();
+    };
+  }, []);
+
   return (
     <ThemeProvider>
       <AuthProvider>

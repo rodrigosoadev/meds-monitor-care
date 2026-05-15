@@ -8,4 +8,8 @@ export default defineConfig({
   tanstackStart: {
     target: "cloudflare",
   },
+  server: {
+    host: '0.0.0.0',  // Allow connections from network
+    port: 8081,
+  },
 });

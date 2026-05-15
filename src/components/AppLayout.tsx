@@ -3,6 +3,7 @@ import { Activity, Calendar, Home, Pill, Plus, LogOut } from "lucide-react";
 import { NextDoseBanner } from "./NextDoseBanner";
 import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "@/lib/auth";
+import { useLogs, useMeds } from "@/lib/storage";
 import { toast } from "sonner";
 
 const navItems = [
@@ -15,6 +16,9 @@ const navItems = [
 export function AppLayout() {
   const loc = useLocation();
   const { user, signOut } = useAuth();
+  const meds = useMeds();
+  const logs = useLogs();
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Desktop sidebar */}

@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
+import { App } from "@capacitor/app";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./auth";
 import { toast } from "sonner";
+import { rescheduleAllNotifications } from "./notifications";
 
 export type MedFrequency =
   | "daily"
@@ -240,11 +242,15 @@ async function loadAll(userId: string) {
   loadingState = false;
   initialized = true;
   notify();
+  rescheduleAllNotifications(cachedMeds).catch((error) => {
+    console.error('[Notifications] reschedule after loadAll failed:', error);
+  });
 }
 
 let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 let realtimeUserId: string | null = null;
 const connectedStates = new Set(["joined", "joining", "subscribed", "connecting", "open"]);
+let appStateListenerAttached = false;
 
 function setupRealtime(userId: string) {
   console.log("[setupRealtime] Setting up realtime for user:", userId);
@@ -359,6 +365,21 @@ function useStoreSync() {
     }
     ensureRealtimeConnected(userId);
   }, [loading, userId]);
+
+  useEffect(() => {
+    if (appStateListenerAttached) return;
+    appStateListenerAttached = true;
+
+    App.addListener('appStateChange', async ({ isActive }) => {
+      if (!isActive) return;
+      if (cachedMeds.length === 0) return;
+      try {
+        await rescheduleAllNotifications(cachedMeds);
+      } catch (error) {
+        console.error('[Notifications] reschedule on app active failed:', error);
+      }
+    });
+  }, []);
 }
 
 export function useMeds(): Medication[] {
@@ -395,6 +416,13 @@ export async function addMed(med: Omit<Medication, "id" | "createdAt" | "status"
   console.log("[addMed] Success, updating cache");
   const newMed = rowToMed(data as MedRow);
   cachedMeds = [...cachedMeds, newMed];
+
+  try {
+    await rescheduleAllNotifications(cachedMeds);
+  } catch (error) {
+    console.error('[Notifications] reschedule after addMed failed:', error);
+  }
+
   notify();
   ensureRealtimeConnected(uid);
 }
@@ -413,6 +441,13 @@ export async function updateMed(id: string, patch: Partial<Medication>) {
   console.log("[updateMed] Success, updating cache");
   const updated = rowToMed(data as MedRow);
   cachedMeds = cachedMeds.map((m) => (m.id === id ? updated : m));
+
+  try {
+    await rescheduleAllNotifications(cachedMeds);
+  } catch (error) {
+    console.error('[Notifications] reschedule after updateMed failed:', error);
+  }
+
   notify();
   if (uid) ensureRealtimeConnected(uid);
 }
@@ -428,6 +463,13 @@ export async function deleteMed(id: string) {
   }
   console.log("[deleteMed] Success, updating cache");
   cachedMeds = cachedMeds.filter((m) => m.id !== id);
+
+  try {
+    await rescheduleAllNotifications(cachedMeds);
+  } catch (error) {
+    console.error('[Notifications] reschedule after deleteMed failed:', error);
+  }
+
   notify();
   if (uid) ensureRealtimeConnected(uid);
 }
