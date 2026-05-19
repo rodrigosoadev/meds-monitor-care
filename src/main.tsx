@@ -6,24 +6,12 @@ import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { toast } from 'sonner'
-import { setupNotificationChannels, NOTIFICATION_ACTION_ID } from './lib/notifications'
+import { initNotificationPermissions, NOTIFICATION_ACTION_ID } from './lib/notifications'
 import './style.css'
 
 const router = getRouter()
 
-// Inicialização de notificações
-const initNotifications = async () => {
-  // 1. Criar Canais (Android 8+)
-  await setupNotificationChannels();
-
-  // 2. Solicitar permissão
-  const status = await LocalNotifications.checkPermissions();
-  if (status.display !== 'granted') {
-    await LocalNotifications.requestPermissions();
-  }
-};
-
-initNotifications();
+initNotificationPermissions();
 
 LocalNotifications.addListener('localNotificationActionPerformed', async (action) => {
   if (action.actionId !== NOTIFICATION_ACTION_ID) return;

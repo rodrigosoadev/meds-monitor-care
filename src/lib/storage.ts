@@ -3,7 +3,11 @@ import { App } from "@capacitor/app";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./auth";
 import { toast } from "sonner";
-import { rescheduleAllNotifications } from "./notifications";
+import {
+  onNotificationPermissionGranted,
+  rescheduleAllNotifications,
+  syncNotificationPermissionState,
+} from "./notifications";
 
 export type MedFrequency =
   | "daily"
@@ -218,6 +222,13 @@ export function logId(medId: string, date: string, time: string) {
 // ---- Module-level cache + subscribers (single source of truth) ----
 let cachedMeds: Medication[] = [];
 let cachedLogs: DoseLog[] = [];
+
+onNotificationPermissionGranted(() => {
+  if (cachedMeds.length === 0) return;
+  rescheduleAllNotifications(cachedMeds).catch((error) => {
+    console.error("[Notifications] reschedule after permission granted failed:", error);
+  });
+});
 let cachedUserId: string | null = null;
 let initialized = false;
 let loadingState = true;
@@ -242,7 +253,7 @@ async function loadAll(userId: string) {
   loadingState = false;
   initialized = true;
   notify();
-  rescheduleAllNotifications(cachedMeds).catch((error) => {
+  rescheduleAllNotifications(cachedMeds, { silent: true }).catch((error) => {
     console.error('[Notifications] reschedule after loadAll failed:', error);
   });
 }
@@ -374,7 +385,8 @@ function useStoreSync() {
       if (!isActive) return;
       if (cachedMeds.length === 0) return;
       try {
-        await rescheduleAllNotifications(cachedMeds);
+        await syncNotificationPermissionState();
+        await rescheduleAllNotifications(cachedMeds, { silent: true });
       } catch (error) {
         console.error('[Notifications] reschedule on app active failed:', error);
       }
