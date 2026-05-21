@@ -71,6 +71,7 @@ export type Database = {
           interval_hours: number | null
           low_stock_threshold: number | null
           name: string
+          notification_ids: number[]
           photo: string | null
           start_date: string
           start_time: string | null
@@ -93,6 +94,7 @@ export type Database = {
           interval_hours?: number | null
           low_stock_threshold?: number | null
           name: string
+          notification_ids?: number[]
           photo?: string | null
           start_date?: string
           start_time?: string | null
@@ -115,6 +117,7 @@ export type Database = {
           interval_hours?: number | null
           low_stock_threshold?: number | null
           name?: string
+          notification_ids?: number[]
           photo?: string | null
           start_date?: string
           start_time?: string | null

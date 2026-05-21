@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { App } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { supabase } from "@/integrations/supabase/client";
+import { NotificationPermissionBootstrap } from "@/components/NotificationPermissionBootstrap";
 
 function NotFoundComponent() {
   return (
@@ -114,6 +115,7 @@ function RootComponent() {
   return (
     <ThemeProvider>
       <AuthProvider>
+        <NotificationPermissionBootstrap />
         <AuthGate />
         <Toaster position="top-center" richColors theme="system" />
       </AuthProvider>

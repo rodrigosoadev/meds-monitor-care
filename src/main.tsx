@@ -6,12 +6,10 @@ import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { toast } from 'sonner'
-import { initNotificationPermissions, NOTIFICATION_ACTION_ID } from './lib/notifications'
+import { NOTIFICATION_ACTION_ID } from './lib/notifications'
 import './style.css'
 
 const router = getRouter()
-
-initNotificationPermissions();
 
 LocalNotifications.addListener('localNotificationActionPerformed', async (action) => {
   if (action.actionId !== NOTIFICATION_ACTION_ID) return;
@@ -21,11 +19,12 @@ LocalNotifications.addListener('localNotificationActionPerformed', async (action
     date?: string;
     time?: string;
   };
-  if (!extra?.medId || !extra?.date || !extra?.time) return;
+  if (!extra?.medId || !extra?.time) return;
 
   try {
-    const { markDose } = await import('./lib/storage');
-    await markDose(extra.medId, extra.date, extra.time, 'taken');
+    const { markDose, todayStr } = await import('./lib/storage');
+    const date = extra.date ?? todayStr();
+    await markDose(extra.medId, date, extra.time, 'taken');
     toast.success('Dose marcada como tomada ✅');
   } catch (error) {
     console.error('[Notifications] Action mark as taken failed:', error);

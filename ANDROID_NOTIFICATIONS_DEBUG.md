@@ -6,7 +6,9 @@ Guia para diagnosticar por que os **lembretes locais** não aparecem no app Andr
 
 ## URL remota vs bundle local (leia primeiro)
 
-No `capacitor.config.ts` o app pode estar configurado assim:
+O `capacitor.config.ts` **não deve** usar `server.url` no APK de teste (o app carrega `dist/client` local).
+
+Se ainda existir `server.url` apontando para Workers, o celular ignora o build local:
 
 ```ts
 server: {
@@ -145,9 +147,37 @@ Se não aparecer: permissão negada, horário já passou hoje, medicamento não 
 
 ---
 
+## Permissões Android (correção aplicada no projeto)
+
+`AndroidManifest.xml` deve incluir:
+
+- `POST_NOTIFICATIONS`
+- `SCHEDULE_EXACT_ALARM` e `USE_EXACT_ALARM`
+- `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`
+
+Ícone de status: `res/drawable/ic_stat_notification.xml` + `plugins.LocalNotifications.smallIcon` no `capacitor.config.ts`.
+
+No app, ao conceder notificações, o sistema pode pedir também **Alarmes e lembretes** (alarmes exatos).
+
+---
+
+## Agendamento de produção
+
+| Frequência | Comportamento |
+|------------|----------------|
+| `daily` contínuo | `schedule.at` = próximo horário real (ex. 22:00) + `every: 'day'` |
+| `weekly` contínuo | `schedule.on` = weekday + hour + minute por dia marcado |
+| Tratamento finito / alternado / intervalos | Até 60 dias de alarmes com `at` em cada data válida |
+
+IDs estáveis salvos em `medications.notification_ids` (Supabase). Ao editar/pausar, `LocalNotifications.cancel({ id })` usa essa lista.
+
+Permissão na abertura: `NotificationPermissionBootstrap` em `src/routes/__root.tsx`.
+
+---
+
 ## Checklist rápido
 
-- [ ] Decidiu: **sem** `server.url` (teste local) **ou** deploy no **Cloudflare**
+- [ ] `server.url` **removido** do `capacitor.config.ts` (ou deploy feito no Cloudflare)
 - [ ] `npm run build` && `npx cap sync android`
 - [ ] Reinstalou o APK no dispositivo
 - [ ] Notificações permitidas para `com.medsmonitor.app` (Android 13+)

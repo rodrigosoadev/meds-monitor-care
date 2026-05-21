@@ -37,6 +37,8 @@ export interface Medication {
   lowStockThreshold?: number;
   status: MedStatus;
   createdAt: string;
+  /** IDs locais agendados no dispositivo (persistidos no Supabase). */
+  notificationIds?: number[];
 }
 
 export interface DoseLog {
@@ -81,6 +83,7 @@ type MedRow = {
   low_stock_threshold: number | null;
   status: MedStatus;
   created_at: string;
+  notification_ids: number[] | null;
 };
 
 function rowToMed(r: MedRow): Medication {
@@ -103,7 +106,14 @@ function rowToMed(r: MedRow): Medication {
     lowStockThreshold: r.low_stock_threshold ?? undefined,
     status: r.status,
     createdAt: r.created_at,
+    notificationIds: r.notification_ids ?? [],
   };
+}
+
+/** Atualiza cache após persistir IDs de notificação (evita import circular). */
+export function patchCachedMedNotificationIds(medId: string, ids: number[]) {
+  cachedMeds = cachedMeds.map((m) => (m.id === medId ? { ...m, notificationIds: ids } : m));
+  notify();
 }
 
 function medToInsert(m: Omit<Medication, "id" | "createdAt" | "status"> & { status?: MedStatus }, userId: string) {
