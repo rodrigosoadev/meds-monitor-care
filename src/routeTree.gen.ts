@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as MedicationsRouteImport } from './routes/medications'
+import { Route as FarmaciasRouteImport } from './routes/farmacias'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AddRouteImport } from './routes/add'
@@ -24,6 +25,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const MedicationsRoute = MedicationsRouteImport.update({
   id: '/medications',
   path: '/medications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FarmaciasRoute = FarmaciasRouteImport.update({
+  id: '/farmacias',
+  path: '/farmacias',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CalendarRoute = CalendarRouteImport.update({
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/add': typeof AddRoute
   '/auth': typeof AuthRoute
   '/calendar': typeof CalendarRoute
+  '/farmacias': typeof FarmaciasRoute
   '/medications': typeof MedicationsRoute
   '/reset-password': typeof ResetPasswordRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/add': typeof AddRoute
   '/auth': typeof AuthRoute
   '/calendar': typeof CalendarRoute
+  '/farmacias': typeof FarmaciasRoute
   '/medications': typeof MedicationsRoute
   '/reset-password': typeof ResetPasswordRoute
 }
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   '/add': typeof AddRoute
   '/auth': typeof AuthRoute
   '/calendar': typeof CalendarRoute
+  '/farmacias': typeof FarmaciasRoute
   '/medications': typeof MedicationsRoute
   '/reset-password': typeof ResetPasswordRoute
 }
@@ -79,16 +88,25 @@ export interface FileRouteTypes {
     | '/add'
     | '/auth'
     | '/calendar'
+    | '/farmacias'
     | '/medications'
     | '/reset-password'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/add' | '/auth' | '/calendar' | '/medications' | '/reset-password'
+  to:
+    | '/'
+    | '/add'
+    | '/auth'
+    | '/calendar'
+    | '/farmacias'
+    | '/medications'
+    | '/reset-password'
   id:
     | '__root__'
     | '/'
     | '/add'
     | '/auth'
     | '/calendar'
+    | '/farmacias'
     | '/medications'
     | '/reset-password'
   fileRoutesById: FileRoutesById
@@ -98,6 +116,7 @@ export interface RootRouteChildren {
   AddRoute: typeof AddRoute
   AuthRoute: typeof AuthRoute
   CalendarRoute: typeof CalendarRoute
+  FarmaciasRoute: typeof FarmaciasRoute
   MedicationsRoute: typeof MedicationsRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
 }
@@ -116,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/medications'
       fullPath: '/medications'
       preLoaderRoute: typeof MedicationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/farmacias': {
+      id: '/farmacias'
+      path: '/farmacias'
+      fullPath: '/farmacias'
+      preLoaderRoute: typeof FarmaciasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/calendar': {
@@ -154,6 +180,7 @@ const rootRouteChildren: RootRouteChildren = {
   AddRoute: AddRoute,
   AuthRoute: AuthRoute,
   CalendarRoute: CalendarRoute,
+  FarmaciasRoute: FarmaciasRoute,
   MedicationsRoute: MedicationsRoute,
   ResetPasswordRoute: ResetPasswordRoute,
 }

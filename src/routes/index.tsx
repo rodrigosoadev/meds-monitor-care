@@ -93,6 +93,27 @@ function TodayPage() {
 
           <HealthHeatmap />
 
+          <div className="grid gap-4 md:grid-cols-[1.5fr_auto]">
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <h2 className="text-lg font-semibold">Farmácias próximas</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Encontre endereços e WhatsApp de farmácias próximas direto no app.
+              </p>
+              <Link
+                to="/farmacias"
+                className="mt-4 inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+              >
+                Ver farmácias
+              </Link>
+            </div>
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <h2 className="text-lg font-semibold">Busque por proximidade</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Use sua localização atual para localizar farmácias e melhorar seu acesso ao atendimento.
+              </p>
+            </div>
+          </div>
+
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Agenda de hoje</h2>

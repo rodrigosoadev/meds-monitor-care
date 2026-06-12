@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
-import { Activity, Calendar, Home, Pill, Plus, LogOut } from "lucide-react";
+import { Activity, Calendar, Home, MapPin, Pill, Plus, LogOut } from "lucide-react";
 import { NextDoseBanner } from "./NextDoseBanner";
 import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "@/lib/auth";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 const navItems = [
   { to: "/", label: "Hoje", icon: Home },
+  { to: "/farmacias", label: "Farmácias", icon: MapPin },
   { to: "/medications", label: "Remédios", icon: Pill },
   { to: "/calendar", label: "Calendário", icon: Calendar },
   { to: "/add", label: "Adicionar", icon: Plus },
