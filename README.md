@@ -2,6 +2,7 @@
 
 Um app de gestão e adesão a medicamentos criado para ajudar pessoas com tratamento crônico a se organizarem e não esquecerem doses.
 
+![Screenshot placeholder](img/mds.png)
 ## Motivação
 
 O projeto nasceu para ajudar a minha namorada, que tem lúpus, a controlar a medicação diária. Antes do app, ela anotava tudo em um caderno e acabava esquecendo doses. O objetivo é transformar essa rotina em um sistema mais confiável e acessível.
